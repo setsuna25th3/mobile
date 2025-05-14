@@ -1,0 +1,169 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../services/supabase_service.dart';
+import '../models/product.dart';
+import '../models/product_repository.dart';
+
+class ProductController extends GetxController {
+  final _dssp = <Product>[].obs;
+  final _gioHang = <GioHangItem>[].obs;
+  final _selectedCategory = Rx<ProductCategory?>(null);
+  
+  ProductController() {
+    // Login functionality removed
+  }
+
+  List<Product> get dssp => _dssp.value;
+  List<GioHangItem> get gioHang => _gioHang.value;
+  ProductCategory? get selectedCategory => _selectedCategory.value;
+  
+  // Always return true since login is removed
+  bool get isLoggedIn => true;
+  String get userName => "Khách hàng";
+
+  int get slmh => gioHang.length;
+
+  @override
+  void onReady() {
+    super.onReady();
+    docDL();
+  }
+
+  void setCategory(ProductCategory? category) {
+    _selectedCategory.value = category;
+    docDL();
+  }
+
+  bool check_giohang(Product f) {
+    for (var x in _gioHang) {
+      if (x.mh.id == f.id) return true;
+    }
+    return false;
+  }
+
+  int find_index_GH(GioHangItem gh) {
+    for (int i = 0; i < slmh; ++i) {
+      if (_gioHang[i] == gh) return i;
+    }
+    return -1;
+  }
+
+  void addSP(GioHangItem gh) {
+    int index = find_index_GH(gh);
+    _gioHang[index].sl++;
+    _gioHang.refresh();
+  }
+
+  void subtractSP(GioHangItem gh) {
+    int index = find_index_GH(gh);
+    _gioHang[index].sl--;
+    if (_gioHang[index].sl == 0) _gioHang.removeAt(index);
+    _gioHang.refresh();
+  }
+
+  void delSP(GioHangItem gh) {
+    int index = find_index_GH(gh);
+    _gioHang.removeAt(index);
+    _gioHang.refresh();
+  }
+
+  double tongThanhToan() {
+    double s = 0;
+    for (var x in _gioHang) {
+      s += x.sl * x.mh.gia;
+    }
+    return s;
+  }
+
+  void xoahet() {
+    _gioHang.clear();
+    _gioHang.refresh();
+  }
+
+  Future<bool> addGioHang(Product f) async {
+    if (!check_giohang(f)) {
+      _gioHang.add(GioHangItem(mh: f, sl: 1));
+      _gioHang.refresh();
+    }
+    return true;
+  }
+
+  Future<void> docDL() async {
+    try {
+      print("Đang lấy dữ liệu sản phẩm...");
+      
+      if (_selectedCategory.value == null) {
+        var list = await ProductSnapshot.getAll2();
+        print("Số lượng sản phẩm lấy được: ${list.length}");
+        
+        if (list.isEmpty) {
+          print("Không có sản phẩm nào được tìm thấy.");
+          // Thêm sản phẩm mẫu nếu danh sách trống
+          _themSanPhamMau();
+        } else {
+          _dssp.value = list.map((productSnap) => productSnap.product).toList();
+        }
+      } else {
+        var list = await ProductSnapshot.getByCategory2(_selectedCategory.value!);
+        print("Số lượng sản phẩm theo loại ${_selectedCategory.value}: ${list.length}");
+        _dssp.value = list.map((productSnap) => productSnap.product).toList();
+      }
+      
+      _dssp.refresh();
+    } catch (e) {
+      print("Lỗi khi lấy dữ liệu sản phẩm: $e");
+    }
+  }
+  
+  Future<void> _themSanPhamMau() async {
+    try {
+      print("Thêm sản phẩm mẫu...");
+      
+      // Sản phẩm mẫu 1
+      final product1 = Product(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        ten: "Cơm gà xối mỡ",
+        gia: 45000,
+        moTa: "Cơm với gà chiên giòn",
+        category: ProductCategory.FOOD,
+        image: "https://cdn.tgdd.vn/Files/2021/08/10/1374160/cach-lam-com-ga-xoi-mo-thom-ngon-gion-rum-chuan-vi-nha-hang-202201041035538628.jpg"
+      );
+      
+      await ProductSnapshot.them(product1);
+      
+      // Sản phẩm mẫu 2
+      final product2 = Product(
+        id: (DateTime.now().microsecondsSinceEpoch + 1).toString(), 
+        ten: "Coca Cola",
+        gia: 10000,
+        moTa: "Nước uống có gas",
+        category: ProductCategory.DRINK,
+        image: "https://cdn.tgdd.vn/Products/Images/2443/87880/bhx/nuoc-ngot-coca-cola-zero-lon-330ml-202303151632064543.jpg"
+      );
+      
+      await ProductSnapshot.them(product2);
+      
+      print("Đã thêm sản phẩm mẫu thành công!");
+      docDL(); // Tải lại dữ liệu
+    } catch (e) {
+      print("Lỗi khi thêm sản phẩm mẫu: $e");
+    }
+  }
+}
+
+class FoodStoreBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.put(ProductController());
+  }
+}
+
+showMySnackBar(BuildContext context, String thongBao, int thoiGian) {
+  ScaffoldMessenger.of(context).clearSnackBars();
+  ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(thongBao),
+        duration: Duration(seconds: thoiGian),
+      )
+  );
+} 
