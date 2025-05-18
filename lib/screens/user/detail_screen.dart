@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import '../../controllers/product_controller.dart';
 import '../../models/product.dart';
 import 'cart_screen.dart';
+import '../../services/supabase_service.dart';
 
 // Alias tạm thời để giữ khả năng tương thích
 class CartScreen extends StatelessWidget {
@@ -101,34 +102,6 @@ class PageDetailProduct extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "${sp.gia} đ",
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red,
-                        ),
-                      ),
-                      // Nút thêm vào giỏ hàng đặt bên phải
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        ),
-                        onPressed: () => _handleAddToCart(context),
-                        icon: const Icon(Icons.shopping_cart),
-                        label: const Text(
-                          "Thêm vào giỏ hàng",
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
                   const Text(
                     "Mô tả:",
                     style: TextStyle(
@@ -144,7 +117,45 @@ class PageDetailProduct extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Suggestions or related products can be added here
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Giá: ${sp.gia.toStringAsFixed(0)}đ",
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                      Text(
+                        "Tồn kho: ${sp.stock}",
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onPressed: () => _handleAddToCart(context),
+                        icon: const Icon(Icons.shopping_cart),
+                        label: const Text(
+                          "Thêm vào giỏ hàng",
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -155,7 +166,10 @@ class PageDetailProduct extends StatelessWidget {
   }
   
   Future<void> _handleAddToCart(BuildContext context) async {
-    // Thêm vào giỏ hàng
+    if (!SupabaseService.isLoggedIn()) {
+      Navigator.of(context).pushNamed('/login');
+      return;
+    }
     final success = await controller.addGioHang(sp);
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'services/supabase_service.dart';
 import 'screens/user/home_screen.dart';
+import 'screens/user/login_screen.dart';
 import 'config.dart';
 
 void main() async {
@@ -43,6 +44,9 @@ class FoodStoreApp extends StatelessWidget {
           ),
         ),
       ),
+      routes: {
+        '/login': (context) => const UserLoginScreen(),
+      },
       home: HomePageFood(), // Màn hình chính của ứng dụng dành cho người dùng
     );
   }

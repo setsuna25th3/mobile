@@ -47,6 +47,5 @@ class ThongTinNguoiNhan {
   
   Future<void> luuThongTinNguoiNhan() async {
     // Lưu thông tin người nhận vào Supabase hoặc local storage
-    print('Lưu thông tin người nhận: $tenNguoiNhan, $diaChi, $soDienThoai');
   }
 } 

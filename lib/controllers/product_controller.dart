@@ -21,7 +21,7 @@ class ProductController extends GetxController {
   bool get isLoggedIn => true;
   String get userName => "Khách hàng";
 
-  int get slmh => gioHang.length;
+  int get slmh => gioHang.fold(0, (sum, item) => sum + item.sl);
 
   @override
   void onReady() {
@@ -42,7 +42,7 @@ class ProductController extends GetxController {
   }
 
   int find_index_GH(GioHangItem gh) {
-    for (int i = 0; i < slmh; ++i) {
+    for (int i = 0; i < _gioHang.length; ++i) {
       if (_gioHang[i] == gh) return i;
     }
     return -1;
@@ -50,21 +50,27 @@ class ProductController extends GetxController {
 
   void addSP(GioHangItem gh) {
     int index = find_index_GH(gh);
-    _gioHang[index].sl++;
-    _gioHang.refresh();
+    if (index != -1) {
+      _gioHang[index].sl++;
+      _gioHang.refresh();
+    }
   }
 
   void subtractSP(GioHangItem gh) {
     int index = find_index_GH(gh);
-    _gioHang[index].sl--;
-    if (_gioHang[index].sl == 0) _gioHang.removeAt(index);
-    _gioHang.refresh();
+    if (index != -1) {
+      _gioHang[index].sl--;
+      if (_gioHang[index].sl == 0) _gioHang.removeAt(index);
+      _gioHang.refresh();
+    }
   }
 
   void delSP(GioHangItem gh) {
     int index = find_index_GH(gh);
-    _gioHang.removeAt(index);
-    _gioHang.refresh();
+    if (index != -1) {
+      _gioHang.removeAt(index);
+      _gioHang.refresh();
+    }
   }
 
   double tongThanhToan() {
@@ -81,23 +87,22 @@ class ProductController extends GetxController {
   }
 
   Future<bool> addGioHang(Product f) async {
-    if (!check_giohang(f)) {
+    int index = _gioHang.indexWhere((item) => item.mh.id == f.id);
+    if (index == -1) {
       _gioHang.add(GioHangItem(mh: f, sl: 1));
-      _gioHang.refresh();
+    } else {
+      _gioHang[index].sl++;
     }
+    _gioHang.refresh();
     return true;
   }
 
   Future<void> docDL() async {
     try {
-      print("Đang lấy dữ liệu sản phẩm...");
-      
       if (_selectedCategory.value == null) {
         var list = await ProductSnapshot.getAll2();
-        print("Số lượng sản phẩm lấy được: ${list.length}");
         
         if (list.isEmpty) {
-          print("Không có sản phẩm nào được tìm thấy.");
           // Thêm sản phẩm mẫu nếu danh sách trống
           _themSanPhamMau();
         } else {
@@ -105,20 +110,17 @@ class ProductController extends GetxController {
         }
       } else {
         var list = await ProductSnapshot.getByCategory2(_selectedCategory.value!);
-        print("Số lượng sản phẩm theo loại ${_selectedCategory.value}: ${list.length}");
         _dssp.value = list.map((productSnap) => productSnap.product).toList();
       }
       
       _dssp.refresh();
     } catch (e) {
-      print("Lỗi khi lấy dữ liệu sản phẩm: $e");
+      // Handle error silently
     }
   }
   
   Future<void> _themSanPhamMau() async {
     try {
-      print("Thêm sản phẩm mẫu...");
-      
       // Sản phẩm mẫu 1
       final product1 = Product(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -143,10 +145,9 @@ class ProductController extends GetxController {
       
       await ProductSnapshot.them(product2);
       
-      print("Đã thêm sản phẩm mẫu thành công!");
       docDL(); // Tải lại dữ liệu
     } catch (e) {
-      print("Lỗi khi thêm sản phẩm mẫu: $e");
+      // Handle error silently
     }
   }
 }
