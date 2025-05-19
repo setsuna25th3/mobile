@@ -12,7 +12,7 @@ import '../../services/supabase_service.dart';
 class CartScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return GioHang_Fruit_store();
+    return GioHangFruitStore();
   }
 }
 
@@ -31,34 +31,48 @@ class PageDetailProduct extends StatelessWidget {
         title: const Text("Chi tiết sản phẩm"),
         backgroundColor: Colors.green,
         actions: [
-          InkWell(
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const GioHang_Fruit_store(),
-                ),
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                children: [
-                  Icon(Icons.shopping_cart_outlined),
-                  GetX<ProductController>(
-                    builder: (controller) {
-                      return Text(
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: Icon(Icons.shopping_cart_outlined),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const GioHangFruitStore(),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                top: 5,
+                right: 5,
+                child: GetX<ProductController>(
+                  builder: (controller) {
+                    if (controller.slmh == 0) return SizedBox();
+                    return Container(
+                      padding: EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                      child: Text(
                         "${controller.slmh}",
                         style: TextStyle(
                           color: Colors.white,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
-                      );
-                    },
-                  ),
-                ],
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
+            ],
           ),
+          SizedBox(width: 10),
         ],
       ),
       body: SingleChildScrollView(

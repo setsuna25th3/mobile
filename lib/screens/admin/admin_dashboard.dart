@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../../controllers/product_controller.dart';
 import '../../services/supabase_service.dart';
 import '../../utils/auth_storage.dart';
 import 'product_management.dart';
-import 'order_management.dart';
-import 'user_management.dart';
+
+// Thêm constants để dễ bảo trì
+class AdminPages {
+  static const int dashboard = 0;
+  static const int products = 1;
+}
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -13,12 +19,10 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  int _selectedIndex = 0;
+  int _selectedIndex = AdminPages.dashboard;
   final List<Widget> _pages = [
     const DashboardHome(),
     const ProductManagement(),
-    const OrderManagement(),
-    const UserManagement(),
   ];
 
   void _navigateToPage(int index) {
@@ -29,6 +33,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _logout() async {
     try {
+      // Clear any user data that might persist
+      if (Get.isRegistered<ProductController>()) {
+        final productController = Get.find<ProductController>();
+        await productController.xoahet(); // Clear the cart just in case
+      }
+      
       // Đăng xuất khỏi Supabase
       await SupabaseService.signOut();
       // Xóa trạng thái đăng nhập đã lưu
@@ -86,10 +96,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ListTile(
               leading: const Icon(Icons.dashboard),
               title: const Text('Dashboard'),
-              selected: _selectedIndex == 0,
+              selected: _selectedIndex == AdminPages.dashboard,
               onTap: () {
                 setState(() {
-                  _selectedIndex = 0;
+                  _selectedIndex = AdminPages.dashboard;
                 });
                 Navigator.pop(context);
               },
@@ -97,32 +107,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ListTile(
               leading: const Icon(Icons.inventory),
               title: const Text('Quản lý Sản phẩm'),
-              selected: _selectedIndex == 1,
+              selected: _selectedIndex == AdminPages.products,
               onTap: () {
                 setState(() {
-                  _selectedIndex = 1;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.shopping_cart),
-              title: const Text('Quản lý Đơn hàng'),
-              selected: _selectedIndex == 2,
-              onTap: () {
-                setState(() {
-                  _selectedIndex = 2;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.people),
-              title: const Text('Quản lý Người dùng'),
-              selected: _selectedIndex == 3,
-              onTap: () {
-                setState(() {
-                  _selectedIndex = 3;
+                  _selectedIndex = AdminPages.products;
                 });
                 Navigator.pop(context);
               },
@@ -150,8 +138,6 @@ class DashboardHome extends StatefulWidget {
 
 class _DashboardHomeState extends State<DashboardHome> {
   int _productCount = 0;
-  int _orderCount = 0;
-  int _userCount = 0;
   bool _isLoading = true;
 
   @override
@@ -166,19 +152,15 @@ class _DashboardHomeState extends State<DashboardHome> {
     });
     try {
       final productCount = await SupabaseService.getProductCount();
-      final orderCount = await SupabaseService.getOrderCount();
-      final userCount = await SupabaseService.getUserCount();
+      
       setState(() {
         _productCount = productCount;
-        _orderCount = orderCount;
-        _userCount = userCount;
         _isLoading = false;
       });
     } catch (e) {
       print("Lỗi khi tải dữ liệu dashboard: $e");
       setState(() {
         _isLoading = false;
-        // Optionally show an error message on the dashboard
       });
     }
   }
@@ -202,7 +184,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           ),
           const SizedBox(height: 20),
           GridView.count(
-            crossAxisCount: 3,
+            crossAxisCount: 1,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 16,
@@ -213,21 +195,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                 count: _productCount.toString(),
                 icon: Icons.inventory,
                 color: Colors.green,
-                onTap: () => _navigateToSection(1),
-              ),
-              _buildStatCard(
-                title: 'Đơn hàng',
-                count: _orderCount.toString(),
-                icon: Icons.shopping_cart,
-                color: Colors.orange,
-                onTap: () => _navigateToSection(2),
-              ),
-              _buildStatCard(
-                title: 'Người dùng',
-                count: _userCount.toString(),
-                icon: Icons.people,
-                color: Colors.blue,
-                onTap: () => _navigateToSection(3),
+                onTap: () => _navigateToSection(AdminPages.products),
               ),
             ],
           ),
@@ -237,7 +205,6 @@ class _DashboardHomeState extends State<DashboardHome> {
   }
   
   void _navigateToSection(int index) {
-    // Đơn giản hóa logic điều hướng
     final state = context.findAncestorStateOfType<_AdminDashboardState>();
     if (state != null) {
       state._navigateToPage(index);

@@ -17,13 +17,4 @@ class AppConfig {
   // Admin credentials - should be stored securely in production
   static const String adminEmail = 'admin@example.com';
   static const String adminPassword = 'admin123';
-  
-  // Hàm in thông tin cấu hình để debug
-  static void printConfig() {
-    print('==== APP CONFIG ====');
-    print('Admin Email: $adminEmail');
-    print('Admin Password: $adminPassword');
-    print('Supabase URL: $supabaseUrl');
-    print(' --------');
-  }
 } 

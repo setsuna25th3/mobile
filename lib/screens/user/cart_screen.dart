@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
+// import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../controllers/product_controller.dart';
 import '../../models/product.dart';
 import '../../models/nguoi_nhan.dart';
 import '../../services/supabase_service.dart';
 import 'order_history_screen.dart';
 
-class GioHang_Fruit_store extends StatelessWidget {
-  const GioHang_Fruit_store({super.key});
+class GioHangFruitStore extends StatelessWidget {
+  const GioHangFruitStore({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -242,32 +243,85 @@ class GioHang_Fruit_store extends StatelessWidget {
   }
 }
 
-class ThongTinThanhToanScreen extends StatelessWidget {
+class ThongTinThanhToanScreen extends StatefulWidget {
   final double tongThanhToan;
 
-  const ThongTinThanhToanScreen({Key? key, required this.tongThanhToan}) : super(key: key);
+  const ThongTinThanhToanScreen({super.key, required this.tongThanhToan});
 
   @override
-  Widget build(BuildContext context) {
+  State<ThongTinThanhToanScreen> createState() => _ThongTinThanhToanScreenState();
+}
+
+class _ThongTinThanhToanScreenState extends State<ThongTinThanhToanScreen> {
     final tenNguoiNhanController = TextEditingController();
     final diaChiController = TextEditingController();
     final soDienThoaiController = TextEditingController();
+  bool _isLoading = true;
 
-    // Lấy thông tin profile và tự động điền vào các trường
-    SupabaseService.getCurrentUser().then((user) {
-      if (user != null) {
-        tenNguoiNhanController.text = user['full_name'] ?? '';
-        diaChiController.text = user['address'] ?? '';
-        soDienThoaiController.text = user['phone'] ?? '';
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+  }
+
+  Future<void> _loadUserInfo() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      // Lấy thông tin người dùng trực tiếp từ database
+      final userId = SupabaseService.getCurrentUserId();
+      if (userId == null) {
+        setState(() => _isLoading = false);
+        return;
       }
-    });
+      
+      // Đảm bảo rằng trường address tồn tại trong user_profiles
+      await SupabaseService.ensureUserProfileHasAddressField(userId);
+      
+      // Truy vấn trực tiếp từ bảng user_profiles
+      final supabase = Supabase.instance.client;
+      final userData = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      print('Thông tin người dùng: $userData');
+      print('Có chứa address: ${userData.containsKey('address')}');
+      print('Giá trị address: ${userData['address']}');
+      
+      setState(() {
+        tenNguoiNhanController.text = userData['full_name'] ?? '';
+        soDienThoaiController.text = userData['phone'] ?? '';
+        diaChiController.text = userData['address'] ?? '';
+        
+        print('Địa chỉ đã được gán: ${diaChiController.text}');
+      });
+    } catch (e) {
+      print('Lỗi khi tải thông tin người dùng: $e');
+    } finally {
+      setState(() => _isLoading = false);
+      }
+  }
 
+  @override
+  void dispose() {
+    tenNguoiNhanController.dispose();
+    diaChiController.dispose();
+    soDienThoaiController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Thông tin thanh toán"),
         backgroundColor: Colors.green,
       ),
-      body: Padding(
+      body: _isLoading
+        ? Center(child: CircularProgressIndicator())
+        : Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,7 +339,7 @@ class ThongTinThanhToanScreen extends StatelessWidget {
               decoration: const InputDecoration(labelText: "Số điện thoại"),
             ),
             // Hiển thị tổng số tiền thanh toán
-            Text("Tổng thanh toán: $tongThanhToan VND", style: TextStyle(fontSize: 25),),
+              Text("Tổng thanh toán: ${widget.tongThanhToan} VND", style: TextStyle(fontSize: 25),),
             // Nút xác nhận thanh toán
             ElevatedButton(
               onPressed: () async {
@@ -306,42 +360,80 @@ class ThongTinThanhToanScreen extends StatelessWidget {
                     ),
                   );
                 } else {
-                  try {
+                    // Store context for later use
+                    final currentContext = context;
+                    
+                    // Process the order without BuildContext issues
+                    _processPayment(
+                      currentContext,
+                      tenNguoiNhanController.text,
+                      diaChiController.text,
+                      soDienThoaiController.text,
+                      widget.tongThanhToan
+                    );
+                  }
+                },
+                child: const Text("Xác nhận thanh toán"),
+              ),
+            ],
+          ),
+        ),
+    );
+  }
+
+  void _processPayment(BuildContext context, String tenNguoiNhan, String diaChi, String soDienThoai, double tongThanhToan) async {
+    try {
                     final thongTinNguoiNhan = ThongTinNguoiNhan(
-                      tenNguoiNhan: tenNguoiNhanController.text,
-                      diaChi: diaChiController.text,
-                      soDienThoai: soDienThoaiController.text,
+        tenNguoiNhan: tenNguoiNhan,
+        diaChi: diaChi,
+        soDienThoai: soDienThoai,
                     );
                     
                     // Lưu thông tin người nhận
                     await thongTinNguoiNhan.luuThongTinNguoiNhan();
                     
-                    // Ghi log thông tin đơn hàng
-                    print('=== THÔNG TIN ĐƠN HÀNG ===');
-                    print('Người nhận: ${tenNguoiNhanController.text}');
-                    print('Địa chỉ: ${diaChiController.text}');
-                    print('SĐT: ${soDienThoaiController.text}');
-                    print('Tổng tiền: ${tongThanhToan}');
-                    
                     try {
-                      // Thử lưu đơn hàng - có thêm user_id (bắt buộc theo cấu trúc bảng)
+        // Lưu đơn hàng với user_id
                       final userId = SupabaseService.getCurrentUserId();
-                      print('User ID: $userId');
-                      
-                      final response = await supabase.from('orders').insert({
+        
+        // Lấy danh sách sản phẩm từ giỏ hàng
+        final cartItems = Get.find<ProductController>().gioHang;
+        
+        if (cartItems.isEmpty) {
+          throw Exception("Giỏ hàng trống");
+        }
+        
+        // Lưu đơn hàng và lấy ID đơn hàng mới
+        final supabase = Supabase.instance.client;
+        final ordersResponse = await supabase.from('orders').insert({
                         'user_id': userId,
                         'total_amount': tongThanhToan,
                         'status': 'pending',
-                        'phone': soDienThoaiController.text,
-                        'address': diaChiController.text,
-                        'customer_name': tenNguoiNhanController.text
-                      });
-                      print('Lưu đơn hàng thành công: $response');
+          'phone': soDienThoai,
+          'address': diaChi,
+          'customer_name': tenNguoiNhan,
+          'created_at': DateTime.now().toIso8601String()
+        }).select('id');
+        
+        if (ordersResponse.isNotEmpty) {
+          final orderId = ordersResponse[0]['id'];
+          
+          // Lưu từng sản phẩm trong giỏ hàng vào bảng order_items
+          for (var item in cartItems) {
+            try {
+              await supabase.from('order_items').insert({
+                'order_id': orderId,
+                'product_id': item.mh.id,
+                'quantity': item.sl,
+                'price': item.mh.gia
+              });
+            } catch (itemError) {
+              // Bỏ qua lỗi và tiếp tục với các sản phẩm khác
+            }
+          }
+        }
                     } catch (dbError) {
                       // Chỉ ghi log lỗi, không throw exception để tiếp tục luồng thành công
-                      print('⚠️ LỖI KHI LƯU ĐƠN HÀNG: ${dbError.toString()}');
-                      print('⚠️ Cần kiểm tra lại cấu trúc bảng orders trong Supabase!');
-                      // Bạn có thể gửi lỗi này về server log để sửa sau
                     }
                     
                     // Xóa giỏ hàng và tiếp tục luồng thành công
@@ -373,6 +465,7 @@ class ThongTinThanhToanScreen extends StatelessWidget {
                           TextButton(
                             onPressed: () {
                               Navigator.of(context).pop();
+                // Tải lại dữ liệu đơn hàng và chuyển đến màn hình lịch sử đơn hàng
                               Navigator.of(context).pushReplacement(
                                 MaterialPageRoute(builder: (context) => OrderHistoryScreen()),
                               );
@@ -397,13 +490,5 @@ class ThongTinThanhToanScreen extends StatelessWidget {
                       ),
                     );
                   }
-                }
-              },
-              child: const Text("Xác nhận thanh toán"),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 } 

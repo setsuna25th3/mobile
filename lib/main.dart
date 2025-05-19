@@ -8,6 +8,7 @@ import 'config.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseService.initialize();
+  
   runApp(const FoodStoreApp());
 }
 
@@ -16,7 +17,7 @@ class FoodStoreApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return GetMaterialApp(
       title: AppConfig.userAppTitle,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

@@ -38,34 +38,48 @@ class HomePageFood extends StatelessWidget {
         title: const Text("Cửa hàng Đồ ăn"),
         backgroundColor: Colors.green,
         actions: [
-          InkWell(
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => CartScreen(),
-                ),
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                children: [
-                  Icon(Icons.shopping_cart),
-                  GetX<ProductController>(
-                    builder: (controller) {
-                      return Text(
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: Icon(Icons.shopping_cart),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => CartScreen(),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                top: 5,
+                right: 5,
+                child: GetX<ProductController>(
+                  builder: (controller) {
+                    if (controller.slmh == 0) return SizedBox();
+                    return Container(
+                      padding: EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                      child: Text(
                         "${controller.slmh}",
                         style: TextStyle(
                           color: Colors.white,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
-                      );
-                    },
-                  ),
-                ],
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
+            ],
           ),
+          SizedBox(width: 10),
         ],
       ),
       drawer: Drawer(
@@ -79,7 +93,12 @@ class HomePageFood extends StatelessWidget {
                 children: [
                   Icon(Icons.account_circle, size: 48, color: Colors.white),
                   SizedBox(height: 8),
-                  Text('Xin chào!', style: TextStyle(color: Colors.white, fontSize: 18)),
+                  Text(
+                    SupabaseService.isLoggedIn() 
+                      ? 'Xin chào!' 
+                      : 'Vui lòng đăng nhập',
+                    style: TextStyle(color: Colors.white, fontSize: 18)
+                  ),
                 ],
               ),
             ),
@@ -90,6 +109,7 @@ class HomePageFood extends StatelessWidget {
                 Navigator.pop(context);
               },
             ),
+            // Giỏ hàng luôn hiển thị
             ListTile(
               leading: Stack(
                 children: [
@@ -117,35 +137,70 @@ class HomePageFood extends StatelessWidget {
               title: Text('Giỏ hàng'),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.of(context).push(MaterialPageRoute(builder: (context) => CartScreen()));
+                if (SupabaseService.isLoggedIn()) {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => CartScreen()));
+                } else {
+                  Navigator.of(context).pushNamed('/login');
+                }
               },
             ),
+            // Tài khoản của tôi luôn hiển thị
             ListTile(
               leading: Icon(Icons.person),
               title: Text('Tài khoản của tôi'),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.of(context).push(MaterialPageRoute(builder: (context) => ProfileScreen()));
+                if (SupabaseService.isLoggedIn()) {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => ProfileScreen()));
+                } else {
+                  Navigator.of(context).pushNamed('/login');
+                }
               },
             ),
+            // Lịch sử đơn hàng luôn hiển thị
             ListTile(
               leading: Icon(Icons.history),
               title: Text('Lịch sử đơn hàng'),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.of(context).push(MaterialPageRoute(builder: (context) => OrderHistoryScreen()));
+                if (SupabaseService.isLoggedIn()) {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => OrderHistoryScreen()));
+                } else {
+                  Navigator.of(context).pushNamed('/login');
+                }
               },
             ),
             Divider(),
-            ListTile(
-              leading: Icon(Icons.logout, color: Colors.red),
-              title: Text('Đăng xuất', style: TextStyle(color: Colors.red)),
-              onTap: () async {
-                Navigator.pop(context);
-                await SupabaseService.signOut();
-                Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-              },
-            ),
+            if (SupabaseService.isLoggedIn()) ... [
+              ListTile(
+                leading: Icon(Icons.logout, color: Colors.red),
+                title: Text('Đăng xuất', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  
+                  // Clear the cart before logging out
+                  if (Get.isRegistered<ProductController>()) {
+                    final productController = Get.find<ProductController>();
+                    await productController.xoahet(); // Clear the cart
+                  }
+                  
+                  await SupabaseService.signOut();
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => HomePageFood()),
+                    (route) => false,
+                  );
+                },
+              ),
+            ] else ...[
+              ListTile(
+                leading: Icon(Icons.login, color: Colors.green),
+                title: Text('Đăng nhập', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).pushNamed('/login');
+                },
+              ),
+            ],
           ],
         ),
       ),

@@ -68,7 +68,7 @@ class _ProductManagementState extends State<ProductManagement> with SingleTicker
 
   Future<void> _deleteProduct(String productId) async {
     try {
-      await supabase.from('products').delete().eq('id', productId);
+      await SupabaseService.deleteProduct(productId);
       _loadProducts();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -346,9 +346,9 @@ class _ProductManagementState extends State<ProductManagement> with SingleTicker
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: product['hinh_anh'] != null
+        child: product['image'] != null
             ? Image.network(
-                product['hinh_anh'],
+                product['image'],
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return const Center(
@@ -556,17 +556,14 @@ class _ProductManagementState extends State<ProductManagement> with SingleTicker
                 
                 try {
                   if (product == null) {
-                    await supabase.from('products').insert(productData);
+                    await SupabaseService.addProduct(productData);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Thêm sản phẩm thành công')),
                       );
                     }
                   } else {
-                    await supabase
-                        .from('products')
-                        .update(productData)
-                        .eq('id', product['id']);
+                    await SupabaseService.updateProduct(product['id'], productData);
                     
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:get/get.dart';
 import '../models/product.dart';
+import '../controllers/product_controller.dart';
 import '../config.dart';
 
 final supabase = Supabase.instance.client;
@@ -13,39 +15,31 @@ class SupabaseService {
     );
   }
 
-  // PHẦN XÁCH THỰC NGƯỜI DÙNG
+  // PHẦN AUTHENTICATION
   
-  // Kiểm tra người dùng đã đăng nhập hay chưa
   static bool isLoggedIn() {
     return supabase.auth.currentUser != null;
   }
   
-  // Lấy ID người dùng hiện tại
   static String? getCurrentUserId() {
     return supabase.auth.currentUser?.id;
   }
   
-  // Lấy thông tin người dùng
   static Future<Map<String, dynamic>?> getCurrentUser() async {
     try {
       final userId = getCurrentUserId();
-      if (userId == null) {
-        return null;
-      }
+      if (userId == null) return null;
       
-      final response = await supabase
+      return await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
-        
-      return response;
     } catch (e) {
       return null;
     }
   }
   
-  // Đăng nhập
   static Future<bool> signIn(String email, String password) async {
     try {
       final response = await supabase.auth.signInWithPassword(
@@ -53,172 +47,110 @@ class SupabaseService {
         password: password,
       );
       
-      if (response.user != null) {
-        return true;
-      } else {
-        return false;
-      }
+      return response.user != null;
     } catch (e) {
       return false;
     }
   }
   
-  // Đăng ký
   static Future<bool> signUp(String email, String password, String name, String phone) async {
-    final response = await supabase.auth.signUp(
-      email: email,
-      password: password,
-    );
-    
-    if (response.user != null) {
-      // Tạo hồ sơ người dùng
-      await supabase.from('user_profiles').insert({
-        'id': response.user!.id,
-        'full_name': name,
-        'phone': phone,
-        'role': 'user',
-        'email': email,
-      });
+    try {
+      final response = await supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
       
-      return true;
+      if (response.user != null) {
+        await supabase.from('user_profiles').insert({
+          'id': response.user!.id,
+          'full_name': name,
+          'phone': phone,
+          'role': 'user',
+          'email': email,
+        });
+        
+        return true;
+      }
+      
+      return false;
+    } catch (e) {
+      return false;
     }
-    
-    return false;
   }
   
-  // Đăng xuất
   static Future<void> signOut() async {
+    try {
+      if (GetInstance().isRegistered<ProductController>()) {
+        final productController = GetInstance().find<ProductController>();
+        await productController.xoahet();
+      }
+    } catch (e) {
+      // Ignore any errors with clearing cart
+    }
+    
     await supabase.auth.signOut();
   }
   
-  // PHẦN DÀNH CHO ỨNG DỤNG NGƯỜI DÙNG
+  // PHẦN SẢN PHẨM
   
-  // Lấy danh sách sản phẩm theo danh mục
   static Future<List<Map<String, dynamic>>> getProductsByCategory(ProductCategory category) async {
-    final response = await supabase
-      .from('products')
-      .select('*')
-      .eq('category', category.toString().split('.').last)
-      .order('created_at', ascending: false);
-    
-    return response;
-  }
-  
-  // Lấy tất cả sản phẩm
-  static Future<List<Map<String, dynamic>>> getAllProducts() async {
     try {
-      // Thử truy vấn từ các bảng khác nhau để xem bảng nào có dữ liệu
-      List<String> possibleTableNames = ['products', 'product', 'mon_an', 'san_pham']; 
-      List<Map<String, dynamic>> finalResponse = [];
-      
-      for (String tableName in possibleTableNames) {
-        try {
-          final response = await supabase
-            .from(tableName)
-            .select('*')
-            .order('created_at', ascending: false); // Lấy tất cả sản phẩm thay vì giới hạn 10
-          
-          if (response.isNotEmpty) {
-            finalResponse = response;
-            break;
-          }
-        } catch (e) {
-          // Bỏ qua lỗi và tiếp tục thử bảng khác
-        }
-      }
-      
-      if (finalResponse.isEmpty) {
-        return [];
-      }
-      
-      // Chuẩn hóa tên trường dữ liệu nếu cần
-      List<Map<String, dynamic>> normalizedProducts = [];
-      for (var product in finalResponse) {
-        Map<String, dynamic> normalizedProduct = {...product};
-        
-        // Các tên trường có thể có
-        final possibleImageFields = ['hinh_anh', 'image', 'anh'];
-        final possibleDescFields = ['mo_ta', 'moTa', 'description', 'desc'];
-        final possibleNameFields = ['ten', 'name', 'title'];
-        final possiblePriceFields = ['gia', 'price'];
-        
-        // Chuẩn hóa trường hình ảnh
-        for (var field in possibleImageFields) {
-          if (product[field] != null) {
-            normalizedProduct['hinh_anh'] = product[field];
-            break;
-          }
-        }
-        
-        // Chuẩn hóa trường mô tả
-        for (var field in possibleDescFields) {
-          if (product[field] != null) {
-            normalizedProduct['mo_ta'] = product[field];
-            break;
-          }
-        }
-        
-        // Chuẩn hóa trường tên
-        for (var field in possibleNameFields) {
-          if (product[field] != null) {
-            normalizedProduct['ten'] = product[field];
-            break;
-          }
-        }
-        
-        // Chuẩn hóa trường giá
-        for (var field in possiblePriceFields) {
-          if (product[field] != null) {
-            normalizedProduct['gia'] = product[field];
-            break;
-          }
-        }
-        
-        normalizedProducts.add(normalizedProduct);
-      }
-      
-      return normalizedProducts;
+      return await supabase
+        .from('products')
+        .select('*')
+        .eq('category', category.toString().split('.').last)
+        .order('created_at', ascending: false);
     } catch (e) {
-      throw e;
+      return [];
     }
   }
   
-  // Tìm kiếm sản phẩm
-  static Future<List<Map<String, dynamic>>> searchProducts(String query) async {
-    final response = await supabase
-      .from('products')
-      .select('*')
-      .ilike('ten', '%$query%')
-      .order('created_at', ascending: false);
-    
-    return response;
+  static Future<List<Map<String, dynamic>>> getAllProducts() async {
+    try {
+      final response = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', ascending: false);
+        
+      return response;
+    } catch (e) {
+      return [];
+    }
   }
   
-  // Thêm sản phẩm vào giỏ hàng
+  static Future<List<Map<String, dynamic>>> searchProducts(String query) async {
+    try {
+      return await supabase
+        .from('products')
+        .select('*')
+        .ilike('ten', '%$query%')
+        .order('created_at', ascending: false);
+    } catch (e) {
+      return [];
+    }
+  }
+  
+  // PHẦN GIỎ HÀNG
+  
   static Future<bool> addToCart(String productId, int quantity) async {
     final userId = getCurrentUserId();
     if (userId == null) return false;
     
     try {
-      // Kiểm tra tồn kho trước khi thêm vào giỏ hàng
-      bool hasStock = await checkProductInStock(productId, quantity);
-      if (!hasStock) {
-        return false;
-      }
-      
       // Kiểm tra xem sản phẩm đã có trong giỏ hàng chưa
       final existingItem = await supabase
         .from('cart_items')
-        .select('*')
+        .select()
         .eq('user_id', userId)
         .eq('product_id', productId)
         .maybeSingle();
       
       if (existingItem != null) {
         // Cập nhật số lượng
+        final newQuantity = (existingItem['quantity'] ?? 0) + quantity;
         await supabase
           .from('cart_items')
-          .update({'quantity': existingItem['quantity'] + quantity})
+          .update({'quantity': newQuantity})
           .eq('id', existingItem['id']);
       } else {
         // Thêm mới vào giỏ hàng
@@ -237,164 +169,137 @@ class SupabaseService {
     }
   }
   
-  // Lấy danh sách sản phẩm trong giỏ hàng
   static Future<List<Map<String, dynamic>>> getCartItems() async {
     final userId = getCurrentUserId();
     if (userId == null) return [];
     
-    final response = await supabase
-      .from('cart_items')
-      .select('*, products(*)')
-      .eq('user_id', userId);
-    
-    return response;
+    try {
+      final response = await supabase
+        .from('cart_items')
+        .select('*, products!product_id(*)')
+        .eq('user_id', userId);
+      
+      return response;
+    } catch (e) {
+      return [];
+    }
   }
 
+  // PHẦN QUYỀN ADMIN
+  
   static Future<bool> isAdmin() async {
     try {
-      final userId = getCurrentUserId();
-      if (userId == null) {
-        return false;
-      }
-      
       final user = await getCurrentUser();
-      if (user == null) {
-        return false;
-      }
-      
-      final isAdminUser = user['role'] == 'admin';
-      
-      return isAdminUser;
+      return user != null && user['role'] == 'admin';
     } catch (e) {
       return false;
     }
   }
   
-  // Cập nhật sản phẩm
+  // PHẦN SẢN PHẨM - ADMIN
+  
   static Future<void> updateProduct(String productId, Map<String, dynamic> productData) async {
     try {
-      // Đảm bảo chỉ có các trường hợp lệ trong database
-      Map<String, dynamic> cleanData = {
-        'ten': productData['ten'],
-        'gia': productData['gia'],
-        'image': productData['image'],
-        'category': productData['category'],
-        'mota': productData['mota'],
-        'stock': productData['stock'],
-      };
+      Map<String, dynamic> cleanData = {};
       
-      // Loại bỏ các giá trị null
-      cleanData.removeWhere((key, value) => value == null);
+      for (final key in ['ten', 'gia', 'image', 'category', 'mota', 'stock']) {
+        if (productData[key] != null) {
+          cleanData[key] = productData[key];
+        }
+      }
       
       await supabase
-          .from('products')
-          .update(cleanData)
-          .eq('id', productId);
+        .from('products')
+        .update(cleanData)
+        .eq('id', productId);
     } catch (e) {
-      throw e;
+      rethrow;
     }
   }
 
-  // Lấy số lượng sản phẩm
+  static Future<void> addProduct(Map<String, dynamic> productData) async {
+    try {
+      await supabase
+        .from('products')
+        .insert(productData);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  static Future<void> deleteProduct(String productId) async {
+    try {
+      await supabase
+        .from('products')
+        .delete()
+        .eq('id', productId);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   static Future<int> getProductCount() async {
     try {
       final response = await supabase
         .from('products')
-        .select();
+        .select('id');
       return response.length;
     } catch (e) {
       return 0;
     }
   }
 
-  // Lấy số lượng đơn hàng
+  // PHẦN ĐƠN HÀNG
+  
   static Future<int> getOrderCount() async {
     try {
       final response = await supabase
         .from('orders')
-        .select();
-      return response.length;
-    } catch (e) {
-      // It's common for orders table to not exist initially or have a different name
-      return 0;
-    }
-  }
-
-  // Lấy số lượng người dùng
-  static Future<int> getUserCount() async {
-    try {
-      final response = await supabase
-        .from('user_profiles')
-        .select();
+        .select('id');
       return response.length;
     } catch (e) {
       return 0;
     }
   }
 
-  // Thêm mới: Lấy danh sách tất cả người dùng
-  static Future<List<Map<String, dynamic>>> getAllUsers() async {
-    try {
-      // Thử join với bảng auth.users để xem thông tin email
-      try {
-        final authJoin = await supabase.rpc('get_users_with_email');
-        if (authJoin.isNotEmpty) {
-          return authJoin;
-        }
-      } catch (e) {
-        // Bỏ qua lỗi và tiếp tục thử bảng khác
-      }
-      
-      // Thử truy vấn trực tiếp vào auth.users (chỉ hoạt động nếu có quyền admin)
-      try {
-        final authUsers = await supabase.from('auth.users').select('id, email').limit(5);
-        return authUsers;
-      } catch (e) {
-        // Bỏ qua lỗi và tiếp tục thử bảng khác
-      }
-      
-      // Lấy thông tin người dùng cơ bản từ user_profiles
-      final response = await supabase
-        .from('user_profiles')
-        .select()
-        .order('created_at', ascending: false);
-      
-      return response;
-    } catch (e) {
-      return [];
-    }
-  }
-
-  // Thêm mới: Lấy danh sách tất cả đơn hàng
   static Future<List<Map<String, dynamic>>> getAllOrders() async {
     try {
-      final response = await supabase
+      return await supabase
         .from('orders')
-        .select()
+        .select('*')
         .order('created_at', ascending: false);
-      
-      return response;
     } catch (e) {
       return [];
     }
   }
 
-  // Thêm mới: Lấy chi tiết đơn hàng theo ID
   static Future<Map<String, dynamic>?> getOrderById(String orderId) async {
     try {
-      final response = await supabase
-        .from('orders')
-        .select('*, order_items(*)')
-        .eq('id', orderId)
-        .single();
-      
-      return response;
+      // Thử nhiều cách join khác nhau
+      for (final joinMethod in [
+        '*, order_items!order_items_order_id_fkey(*, products!order_items_product_id_fkey(*))',
+        '*, order_items!fk_order_id(*, products!fk_product_id(*))',
+        '*'
+      ]) {
+        try {
+          final orderResponse = await supabase
+            .from('orders')
+            .select(joinMethod)
+            .eq('id', orderId)
+            .single();
+          
+          return orderResponse;
+        } catch (e) {
+          // Thử phương thức join tiếp theo
+          continue;
+        }
+      }
+      return null;
     } catch (e) {
       return null;
     }
   }
 
-  // Thêm mới: Cập nhật trạng thái đơn hàng
   static Future<void> updateOrderStatus(String orderId, String status) async {
     try {
       await supabase
@@ -402,11 +307,10 @@ class SupabaseService {
         .update({'status': status})
         .eq('id', orderId);
     } catch (e) {
-      throw e;
+      rethrow;
     }
   }
 
-  // Thêm mới: Xóa đơn hàng
   static Future<void> deleteOrder(String orderId) async {
     try {
       // Xóa các chi tiết đơn hàng trước
@@ -421,61 +325,30 @@ class SupabaseService {
         .delete()
         .eq('id', orderId);
     } catch (e) {
-      throw e;
+      rethrow;
     }
   }
 
-  // Thêm mới: Cập nhật thông tin người dùng
-  static Future<void> updateUserProfile(String userId, Map<String, dynamic> userData) async {
-    try {
-      await supabase
-        .from('user_profiles')
-        .update(userData)
-        .eq('id', userId);
-    } catch (e) {
-      throw e;
-    }
-  }
-
-  // Thêm mới: Xóa người dùng
-  static Future<void> deleteUser(String userId) async {
-    try {
-      // Chỉ xóa profile người dùng
-      await supabase
-        .from('user_profiles')
-        .delete()
-        .eq('id', userId);
-      
-      // Lưu ý: Để xóa hoàn toàn tài khoản người dùng cần dùng Admin API của Supabase
-    } catch (e) {
-      throw e;
-    }
-  }
-
-  // Thêm mới: Cập nhật chỉ số lượng tồn kho của sản phẩm
   static Future<void> updateProductStock(String productId, int newStock) async {
     try {
       await supabase
-          .from('products')
-          .update({'stock': newStock})
-          .eq('id', productId);
+        .from('products')
+        .update({'stock': newStock})
+        .eq('id', productId);
     } catch (e) {
-      throw e;
+      rethrow;
     }
   }
   
-  // Thêm mới: Kiểm tra sản phẩm có còn hàng không
   static Future<bool> checkProductInStock(String productId, int quantity) async {
     try {
       final response = await supabase
-          .from('products')
-          .select('stock')
-          .eq('id', productId)
-          .maybeSingle();
+        .from('products')
+        .select('stock')
+        .eq('id', productId)
+        .maybeSingle();
           
-      if (response == null) {
-        return false;
-      }
+      if (response == null) return false;
       
       int currentStock = response['stock'] ?? 0;
       return currentStock >= quantity;
@@ -484,13 +357,73 @@ class SupabaseService {
     }
   }
 
+  static Future<void> updateUserProfile(String userId, Map<String, dynamic> userData) async {
+    try {
+      await supabase
+        .from('user_profiles')
+        .update(userData)
+        .eq('id', userId);
+    } catch (e) {
+      rethrow;
+    }
+  }
+  
+  // Kiểm tra và cập nhật schema của user_profiles nếu cần
+  static Future<void> ensureUserProfileHasAddressField(String userId) async {
+    try {
+      // Kiểm tra xem user_profiles đã có address chưa
+      final user = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      // Cập nhật trực tiếp
+      await supabase
+        .from('user_profiles')
+        .update({
+          'address': user['address'] ?? '' // Giữ nguyên nếu đã có, không thì tạo rỗng
+        })
+        .eq('id', userId);
+    } catch (e) {
+      // Bỏ qua lỗi
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getOrdersByUser(String userId) async {
-    final response = await supabase
-        .from('orders')
-        .select()
-        .eq('user_id', userId)
-        .order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(response);
+    try {
+      // Thử nhiều cách join khác nhau
+      for (final joinMethod in [
+        '*, order_items!order_items_order_id_fkey(*, products!order_items_product_id_fkey(*))',
+        '*, order_items!fk_order_id(*)',
+        '*'
+      ]) {
+        try {
+          final response = await supabase
+            .from('orders')
+            .select(joinMethod)
+            .eq('user_id', userId)
+            .order('created_at', ascending: false);
+          
+          return response;
+        } catch (e) {
+          // Thử phương thức join tiếp theo
+          continue;
+        }
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static Future<bool> testConnection() async {
+    try {
+      await supabase.from('products').select('id').limit(1);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 }
 
@@ -513,6 +446,24 @@ class MySupabaseConnect extends StatefulWidget {
 class _MySupabaseConnectState extends State<MySupabaseConnect> {
   bool ketNoi = false;
   bool loi = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _khoiTaoSupabase();
+  }
+
+  _khoiTaoSupabase() {
+    SupabaseService.initialize().then((value) {
+      setState(() {
+        ketNoi = true;
+      });
+    }).catchError((error) {
+      setState(() {
+        loi = true;
+      });
+    });
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -545,23 +496,5 @@ class _MySupabaseConnectState extends State<MySupabaseConnect> {
     } else {
       return widget.builder(context);
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _khoiTaoSupabase();
-  }
-
-  _khoiTaoSupabase() {
-    SupabaseService.initialize().then((value) {
-      setState(() {
-        ketNoi = true;
-      });
-    }).catchError((error) {
-      setState(() {
-        loi = true;
-      });
-    });
   }
 } 

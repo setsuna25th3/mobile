@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
+import 'home_screen.dart';
+import 'package:get/get.dart';
+import '../../controllers/product_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -24,14 +27,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadUserInfo() async {
     setState(() => _isLoading = true);
-    final user = await SupabaseService.getCurrentUser();
-    if (user != null) {
-      _nameController.text = user['full_name'] ?? '';
-      _phoneController.text = user['phone'] ?? '';
-      _emailController.text = user['email'] ?? '';
-      _addressController.text = user['address'] ?? '';
+    
+    try {
+      final userId = SupabaseService.getCurrentUserId();
+      if (userId != null) {
+        // Đảm bảo trường address tồn tại
+        await SupabaseService.ensureUserProfileHasAddressField(userId);
+      }
+      
+      final user = await SupabaseService.getCurrentUser();
+      if (user != null) {
+        _nameController.text = user['full_name'] ?? '';
+        _phoneController.text = user['phone'] ?? '';
+        _emailController.text = user['email'] ?? '';
+        _addressController.text = user['address'] ?? '';
+        
+        print('Đã tải địa chỉ: ${_addressController.text}');
+      }
+    } catch (e) {
+      print('Lỗi khi tải thông tin người dùng: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
-    setState(() => _isLoading = false);
   }
 
   Future<void> _updateProfile() async {
@@ -39,19 +56,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
     final userId = SupabaseService.getCurrentUserId();
     if (userId == null) return;
+    
     try {
-      await SupabaseService.updateUserProfile(userId, {
+      // Đảm bảo trường address tồn tại
+      await SupabaseService.ensureUserProfileHasAddressField(userId);
+      
+      final Map<String, dynamic> profileData = {
         'full_name': _nameController.text,
         'phone': _phoneController.text,
         'email': _emailController.text,
-        'address': _addressController.text,
-      });
+        'address': _addressController.text, // Luôn đưa address vào, ngay cả khi trống
+      };
+      
+      // In thông tin dữ liệu trước khi cập nhật
+      print('Dữ liệu cập nhật: $profileData');
+      
+      await SupabaseService.updateUserProfile(userId, profileData);
+      
+      // Kiểm tra xem đã cập nhật thành công chưa
+      final updatedUser = await SupabaseService.getCurrentUser();
+      print('Dữ liệu sau khi cập nhật: $updatedUser');
+      print('Địa chỉ sau khi cập nhật: ${updatedUser?['address']}');
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cập nhật thông tin thành công')),
         );
       }
     } catch (e) {
+      print('Lỗi khi cập nhật profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Lỗi: $e')),
@@ -63,9 +96,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
+    // Clear the cart data using GetX controller
+    if (Get.isRegistered<ProductController>()) {
+      final productController = Get.find<ProductController>();
+      await productController.xoahet(); // Clear the cart
+    }
+    
+    // Then logout
     await SupabaseService.signOut();
+    
     if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => HomePageFood()),
+        (route) => false,
+      );
     }
   }
 

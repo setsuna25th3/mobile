@@ -22,9 +22,6 @@ class _AdminLoginState extends State<AdminLogin> {
   void initState() {
     super.initState();
     _checkLoginStatus();
-    // Pre-fill admin credentials for easier testing
-    _emailController.text = AppConfig.adminEmail;
-    _passwordController.text = AppConfig.adminPassword;
   }
 
   // Kiểm tra trạng thái đăng nhập khi mở ứng dụng
