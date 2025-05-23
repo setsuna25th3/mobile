@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'services/supabase_service.dart';
-import 'screens/admin/admin_login.dart';
+import 'screens/admin/admin_auth_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'utils/auth_storage.dart';
 import 'config.dart';
@@ -30,10 +30,10 @@ class AdminApp extends StatelessWidget {
         ),
         home: AuthStorage.isAdminLoggedIn()
             ? const AdminDashboard()
-            : const AdminLogin(),
+            : const AdminAuthScreen(),
         debugShowCheckedModeBanner: false,
         routes: {
-          '/admin-login': (context) => const AdminLogin(),
+          '/admin-auth': (context) => const AdminAuthScreen(),
           '/admin-dashboard': (context) => const AdminDashboard(),
         },
       );

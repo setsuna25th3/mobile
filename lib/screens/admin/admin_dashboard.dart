@@ -1,55 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../controllers/product_controller.dart';
 import '../../services/supabase_service.dart';
 import '../../utils/auth_storage.dart';
 import 'product_management.dart';
+import 'order_management.dart';
 
-// Thêm constants để dễ bảo trì
 class AdminPages {
-  static const int dashboard = 0;
-  static const int products = 1;
+  static const int dashboard = 0, products = 1, orders = 2;
 }
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
-
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = AdminPages.dashboard;
-  final List<Widget> _pages = [
-    const DashboardHome(),
-    const ProductManagement(),
-  ];
+  final List<Widget> _pages = [const DashboardHome(), const ProductManagement(), const OrderManagement()];
 
-  void _navigateToPage(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  void _navigateToPage(int index) => setState(() => _selectedIndex = index);
 
   Future<void> _logout() async {
     try {
-      // Clear any user data that might persist
       if (Get.isRegistered<ProductController>()) {
-        final productController = Get.find<ProductController>();
-        await productController.xoahet(); // Clear the cart just in case
+        await Get.find<ProductController>().xoahet();
       }
-      
-      // Đăng xuất khỏi Supabase
       await SupabaseService.signOut();
-      // Xóa trạng thái đăng nhập đã lưu
-      await AuthStorage.adminLogout();
+      AuthStorage.adminLogout();
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/admin-login');
+      Navigator.of(context).pushReplacementNamed('/admin-auth');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi khi đăng xuất: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi khi đăng xuất: $e')));
     }
+  }
+
+  Widget _buildDrawerItem(IconData icon, String title, int index) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      selected: _selectedIndex == index,
+      onTap: () {
+        setState(() => _selectedIndex = index);
+        Navigator.pop(context);
+      },
+    );
   }
 
   @override
@@ -59,68 +56,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
         title: const Text('Admin Dashboard'),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-          ),
-        ],
+        actions: [IconButton(icon: const Icon(Icons.logout), onPressed: _logout)],
       ),
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
-              decoration: const BoxDecoration(
-                color: Colors.green,
-              ),
+              decoration: const BoxDecoration(color: Colors.green),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.admin_panel_settings, size: 30, color: Colors.green),
-                  ),
+                  const CircleAvatar(radius: 30, backgroundColor: Colors.white, child: Icon(Icons.admin_panel_settings, size: 30, color: Colors.green)),
                   const SizedBox(height: 10),
-                  Text(
-                    'Admin: ${AuthStorage.getAdminEmail() ?? "Admin"}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                    ),
-                  ),
+                  Text('Admin: ${AuthStorage.getAdminEmail() ?? "Admin"}', style: const TextStyle(color: Colors.white, fontSize: 18)),
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Dashboard'),
-              selected: _selectedIndex == AdminPages.dashboard,
-              onTap: () {
-                setState(() {
-                  _selectedIndex = AdminPages.dashboard;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.inventory),
-              title: const Text('Quản lý Sản phẩm'),
-              selected: _selectedIndex == AdminPages.products,
-              onTap: () {
-                setState(() {
-                  _selectedIndex = AdminPages.products;
-                });
-                Navigator.pop(context);
-              },
-            ),
+            _buildDrawerItem(Icons.dashboard, 'Dashboard', AdminPages.dashboard),
+            _buildDrawerItem(Icons.inventory, 'Quản lý Sản phẩm', AdminPages.products),
+            _buildDrawerItem(Icons.receipt_long, 'Quản lý Đơn hàng', AdminPages.orders),
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Đăng xuất'),
-              onTap: _logout,
-            ),
+            ListTile(leading: const Icon(Icons.logout), title: const Text('Đăng xuất'), onTap: _logout),
           ],
         ),
       ),
@@ -131,13 +88,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
 class DashboardHome extends StatefulWidget {
   const DashboardHome({super.key});
-
   @override
   State<DashboardHome> createState() => _DashboardHomeState();
 }
 
 class _DashboardHomeState extends State<DashboardHome> {
-  int _productCount = 0;
+  int _productCount = 0, _orderCount = 0;
   bool _isLoading = true;
 
   @override
@@ -147,77 +103,31 @@ class _DashboardHomeState extends State<DashboardHome> {
   }
 
   Future<void> _loadDashboardData() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
     try {
       final productCount = await SupabaseService.getProductCount();
       
+      // Lấy tất cả orders và đếm
+      final ordersData = await Supabase.instance.client
+          .from('orders')
+          .select('id');
+      
       setState(() {
         _productCount = productCount;
+        _orderCount = ordersData.length;
         _isLoading = false;
       });
     } catch (e) {
-      print("Lỗi khi tải dữ liệu dashboard: $e");
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Dashboard',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 20),
-          GridView.count(
-            crossAxisCount: 1,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            children: [
-              _buildStatCard(
-                title: 'Sản phẩm',
-                count: _productCount.toString(),
-                icon: Icons.inventory,
-                color: Colors.green,
-                onTap: () => _navigateToSection(AdminPages.products),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-  
   void _navigateToSection(int index) {
     final state = context.findAncestorStateOfType<_AdminDashboardState>();
-    if (state != null) {
-      state._navigateToPage(index);
-    }
+    state?._navigateToPage(index);
   }
 
-  Widget _buildStatCard({
-    required String title,
-    required String count,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildStatCard(String title, String count, IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -228,32 +138,44 @@ class _DashboardHomeState extends State<DashboardHome> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 48,
-                color: color,
-              ),
+              Icon(icon, size: 48, color: color),
               const SizedBox(height: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 5),
-              Text(
-                count,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
+              Text(count, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
             ],
           ),
         ),
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _isLoading 
+      ? const Center(child: CircularProgressIndicator())
+      : SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Dashboard', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              
+              // Stats cards section
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                children: [
+                  _buildStatCard('Sản phẩm', _productCount.toString(), Icons.inventory, Colors.green, () => _navigateToSection(AdminPages.products)),
+                  _buildStatCard('Đơn hàng', _orderCount.toString(), Icons.receipt_long, Colors.blue, () => _navigateToSection(AdminPages.orders)),
+                ],
+              ),
+            ],
+          ),
+        );
   }
 } 

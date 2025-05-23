@@ -1,7 +1,4 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:get/get.dart';
 import '../../controllers/product_controller.dart';
 import '../../models/product.dart';
@@ -24,8 +21,6 @@ class PageDetailProduct extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    double w = MediaQuery.of(context).size.width * 0.9;
-    double rt = (Random().nextInt(21)) / 10.0 + 3;
     return Scaffold(
       appBar: AppBar(
         title: const Text("Chi tiết sản phẩm"),

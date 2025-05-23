@@ -30,13 +30,52 @@ class SupabaseService {
       final userId = getCurrentUserId();
       if (userId == null) return null;
       
-      return await supabase
+      // Thử lấy user profile từ database
+      final userProfile = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+      
+      // Nếu chưa có profile và user đã verify email, tạo profile từ auth metadata
+      if (userProfile == null) {
+        final user = supabase.auth.currentUser;
+        if (user != null && user.emailConfirmedAt != null) {
+          await _createUserProfileFromAuth();
+          // Thử lấy lại sau khi tạo
+          return await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+        }
+      }
+      
+      return userProfile;
     } catch (e) {
       return null;
+    }
+  }
+  
+  // Tạo user profile từ auth metadata sau khi email được verify
+  static Future<void> _createUserProfileFromAuth() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null || user.emailConfirmedAt == null) return;
+      
+      // Lấy metadata từ user auth
+      final fullName = user.userMetadata?['full_name'] ?? user.email?.split('@')[0] ?? 'User';
+      final phone = user.userMetadata?['phone'] ?? '';
+      
+      await supabase.from('user_profiles').insert({
+        'id': user.id,
+        'full_name': fullName,
+        'phone': phone,
+        'role': 'user',
+        'email': user.email,
+      });
+    } catch (e) {
+      // Bỏ qua lỗi nếu profile đã tồn tại
     }
   }
   
@@ -48,31 +87,6 @@ class SupabaseService {
       );
       
       return response.user != null;
-    } catch (e) {
-      return false;
-    }
-  }
-  
-  static Future<bool> signUp(String email, String password, String name, String phone) async {
-    try {
-      final response = await supabase.auth.signUp(
-        email: email,
-        password: password,
-      );
-      
-      if (response.user != null) {
-        await supabase.from('user_profiles').insert({
-          'id': response.user!.id,
-          'full_name': name,
-          'phone': phone,
-          'role': 'user',
-          'email': email,
-        });
-        
-        return true;
-      }
-      
-      return false;
     } catch (e) {
       return false;
     }
@@ -137,6 +151,9 @@ class SupabaseService {
     if (userId == null) return false;
     
     try {
+      // Đảm bảo user_profiles tồn tại trước khi thêm vào cart
+      await _ensureUserProfileExists(userId);
+      
       // Kiểm tra xem sản phẩm đã có trong giỏ hàng chưa
       final existingItem = await supabase
         .from('cart_items')
@@ -169,19 +186,101 @@ class SupabaseService {
     }
   }
   
+  // Đảm bảo user profile tồn tại
+  static Future<void> _ensureUserProfileExists(String userId) async {
+    try {
+      // Kiểm tra xem user profile đã tồn tại chưa
+      final existingProfile = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      if (existingProfile == null) {
+        // Tạo user profile từ auth user
+        await _createUserProfileFromAuth();
+      }
+    } catch (e) {
+      // Bỏ qua lỗi
+    }
+  }
+  
   static Future<List<Map<String, dynamic>>> getCartItems() async {
     final userId = getCurrentUserId();
     if (userId == null) return [];
     
     try {
+      // Thử với foreign key constraint name cụ thể
       final response = await supabase
         .from('cart_items')
-        .select('*, products!product_id(*)')
+        .select('''
+          *,
+          products!cart_items_product_id_fkey(
+            id,
+            ten,
+            gia,
+            image,
+            category,
+            mota,
+            stock
+          )
+        ''')
         .eq('user_id', userId);
       
       return response;
     } catch (e) {
-      return [];
+      // Fallback: Thử với tên relationship khác
+      try {
+        final response = await supabase
+          .from('cart_items')
+          .select('''
+            *,
+            products!fk_product_id(
+              id,
+              ten,
+              gia,
+              image,
+              category,
+              mota,
+              stock
+            )
+          ''')
+          .eq('user_id', userId);
+        
+        return response;
+      } catch (e2) {
+        // Fallback: Lấy cart items và join manually
+        final cartItems = await supabase
+          .from('cart_items')
+          .select('*')
+          .eq('user_id', userId);
+        
+        // Manual join với products
+        List<Map<String, dynamic>> result = [];
+        for (var cartItem in cartItems) {
+          try {
+            final productId = cartItem['product_id'];
+            final product = await supabase
+              .from('products')
+              .select('*')
+              .eq('id', productId)
+              .single();
+            
+            result.add({
+              ...cartItem,
+              'products': product,
+            });
+          } catch (productError) {
+            // Keep cart item without product info
+            result.add({
+              ...cartItem,
+              'products': null,
+            });
+          }
+        }
+        
+        return result;
+      }
     }
   }
 
@@ -264,39 +363,96 @@ class SupabaseService {
 
   static Future<List<Map<String, dynamic>>> getAllOrders() async {
     try {
+      // Lấy tất cả orders với thông tin user
       return await supabase
         .from('orders')
-        .select('*')
+        .select('''
+          *,
+          user_profiles!orders_user_profiles_fkey(
+            id,
+            full_name,
+            phone,
+            email
+          )
+        ''')
         .order('created_at', ascending: false);
     } catch (e) {
-      return [];
+      // Fallback: Lấy orders đơn thuần
+      try {
+        return await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', ascending: false);
+      } catch (e2) {
+        return [];
+      }
     }
   }
 
   static Future<Map<String, dynamic>?> getOrderById(String orderId) async {
     try {
-      // Thử nhiều cách join khác nhau
-      for (final joinMethod in [
-        '*, order_items!order_items_order_id_fkey(*, products!order_items_product_id_fkey(*))',
-        '*, order_items!fk_order_id(*, products!fk_product_id(*))',
-        '*'
-      ]) {
-        try {
-          final orderResponse = await supabase
-            .from('orders')
-            .select(joinMethod)
-            .eq('id', orderId)
-            .single();
-          
-          return orderResponse;
-        } catch (e) {
-          // Thử phương thức join tiếp theo
-          continue;
-        }
-      }
-      return null;
+      // Lấy order với full details sử dụng đúng relationships
+      final orderResponse = await supabase
+        .from('orders')
+        .select('''
+          *,
+          user_profiles!orders_user_profiles_fkey(
+            id,
+            full_name,
+            phone,
+            email
+          ),
+          order_items!order_items_order_id_fkey(
+            *,
+            products!order_items_product_id_fkey(
+              id,
+              ten,
+              gia,
+              image,
+              category
+            )
+          )
+        ''')
+        .eq('id', orderId)
+        .single();
+      
+      return orderResponse;
     } catch (e) {
-      return null;
+      // Fallback: Thử với tên relationship khác
+      try {
+        final orderResponse = await supabase
+          .from('orders')
+          .select('''
+            *,
+            user_profiles!orders_user_profiles_fkey(
+              id,
+              full_name,
+              phone,
+              email
+            ),
+            order_items!order_items_order_id_fkey(
+              *,
+              products!fk_product_id(
+                id,
+                ten,
+                gia,
+                image,
+                category
+              )
+            )
+          ''')
+          .eq('id', orderId)
+          .single();
+        
+        return orderResponse;
+      } catch (e2) {
+        // Fallback cuối: Lấy order đơn thuần
+        return await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .single();
+      }
     }
   }
 
@@ -392,28 +548,56 @@ class SupabaseService {
 
   static Future<List<Map<String, dynamic>>> getOrdersByUser(String userId) async {
     try {
-      // Thử nhiều cách join khác nhau
-      for (final joinMethod in [
-        '*, order_items!order_items_order_id_fkey(*, products!order_items_product_id_fkey(*))',
-        '*, order_items!fk_order_id(*)',
-        '*'
-      ]) {
-        try {
-          final response = await supabase
-            .from('orders')
-            .select(joinMethod)
-            .eq('user_id', userId)
-            .order('created_at', ascending: false);
-          
-          return response;
-        } catch (e) {
-          // Thử phương thức join tiếp theo
-          continue;
-        }
-      }
-      return [];
+      // Lấy orders theo user_id với join đúng relationships
+      final response = await supabase
+        .from('orders')
+        .select('''
+          *,
+          order_items!order_items_order_id_fkey(
+            *,
+            products!order_items_product_id_fkey(
+              id,
+              ten,
+              gia,
+              image,
+              category
+            )
+          )
+        ''')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+      
+      return response;
     } catch (e) {
-      return [];
+      // Fallback: Thử với tên relationship khác
+      try {
+        final response = await supabase
+          .from('orders')
+          .select('''
+            *,
+            order_items!order_items_order_id_fkey(
+              *,
+              products!fk_product_id(
+                id,
+                ten,
+                gia,
+                image,
+                category
+              )
+            )
+          ''')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+        
+        return response;
+      } catch (e2) {
+        // Fallback cuối: Lấy orders đơn thuần nếu join lỗi
+        return await supabase
+          .from('orders')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+      }
     }
   }
 

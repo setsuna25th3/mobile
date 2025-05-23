@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'services/supabase_service.dart';
+import 'screens/user/auth_screen.dart';
 import 'screens/user/home_screen.dart';
-import 'screens/user/login_screen.dart';
+import 'controllers/product_controller.dart';
 import 'config.dart';
 
 void main() async {
@@ -20,6 +21,7 @@ class FoodStoreApp extends StatelessWidget {
     return GetMaterialApp(
       title: AppConfig.userAppTitle,
       debugShowCheckedModeBanner: false,
+      initialBinding: FoodStoreBinding(),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
@@ -45,10 +47,11 @@ class FoodStoreApp extends StatelessWidget {
           ),
         ),
       ),
+      home: HomePageFood(),
       routes: {
-        '/login': (context) => const UserLoginScreen(),
+        '/login': (context) => const PageAuthUser(),
+        '/home': (context) => HomePageFood(),
       },
-      home: HomePageFood(), // Màn hình chính của ứng dụng dành cho người dùng
     );
   }
 }

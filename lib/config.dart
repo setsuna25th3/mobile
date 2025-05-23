@@ -1,7 +1,4 @@
 class AppConfig {
-  // App settings
-  static final bool isUser = true;
-  
   // Supabase configuration - should be loaded from environment variables in production
   static const String supabaseUrl = 'https://mraocvqjtuzsxbqrrdsd.supabase.co';
   static const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yYW9jdnFqdHV6c3hicXJyZHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxMjk1NzYsImV4cCI6MjA2MjcwNTU3Nn0.aJsRsc_xa7Mb5i3kODt790hUD2EzufftENulkeudxGY';

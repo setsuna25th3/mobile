@@ -41,11 +41,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _phoneController.text = user['phone'] ?? '';
         _emailController.text = user['email'] ?? '';
         _addressController.text = user['address'] ?? '';
-        
-        print('Đã tải địa chỉ: ${_addressController.text}');
       }
     } catch (e) {
-      print('Lỗi khi tải thông tin người dùng: $e');
+      // Handle error silently
     } finally {
       setState(() => _isLoading = false);
     }
@@ -65,18 +63,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'full_name': _nameController.text,
         'phone': _phoneController.text,
         'email': _emailController.text,
-        'address': _addressController.text, // Luôn đưa address vào, ngay cả khi trống
+        'address': _addressController.text,
       };
       
-      // In thông tin dữ liệu trước khi cập nhật
-      print('Dữ liệu cập nhật: $profileData');
-      
       await SupabaseService.updateUserProfile(userId, profileData);
-      
-      // Kiểm tra xem đã cập nhật thành công chưa
-      final updatedUser = await SupabaseService.getCurrentUser();
-      print('Dữ liệu sau khi cập nhật: $updatedUser');
-      print('Địa chỉ sau khi cập nhật: ${updatedUser?['address']}');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -84,7 +74,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } catch (e) {
-      print('Lỗi khi cập nhật profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Lỗi: $e')),

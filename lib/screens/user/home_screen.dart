@@ -8,22 +8,8 @@ import 'cart_screen.dart';
 import 'profile_screen.dart';
 import 'order_history_screen.dart';
 
-class FoodStoreApp extends StatelessWidget {
-  const FoodStoreApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MySupabaseConnect(
-        errorMessage: "Lỗi rồi!",
-        connectingMessage: "Đang kết nối",
-        builder: (context) => GetMaterialApp(
-          debugShowCheckedModeBanner: false,
-          initialBinding: FoodStoreBinding(),
-          home: HomePageFood(),
-        ),
-    );
-  }
-}
+// Type alias cho dễ đọc
+typedef CartScreen = GioHangFruitStore;
 
 class HomePageFood extends StatelessWidget {
   HomePageFood({Key? key}) : super(key: key);
@@ -31,6 +17,13 @@ class HomePageFood extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Sync cart nếu user đã login
+    if (SupabaseService.isLoggedIn()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await controller.syncCartFromDatabase();
+      });
+    }
+    
     final searchController = TextEditingController();
     String searchQuery = '';
     return Scaffold(
@@ -44,11 +37,15 @@ class HomePageFood extends StatelessWidget {
               IconButton(
                 icon: Icon(Icons.shopping_cart),
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => CartScreen(),
-                    ),
-                  );
+                  if (SupabaseService.isLoggedIn()) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => CartScreen(),
+                      ),
+                    );
+                  } else {
+                    Navigator.of(context).pushNamed('/login');
+                  }
                 },
               ),
               Positioned(
@@ -88,18 +85,64 @@ class HomePageFood extends StatelessWidget {
           children: [
             DrawerHeader(
               decoration: BoxDecoration(color: Colors.green),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.account_circle, size: 48, color: Colors.white),
-                  SizedBox(height: 8),
-                  Text(
-                    SupabaseService.isLoggedIn() 
-                      ? 'Xin chào!' 
-                      : 'Vui lòng đăng nhập',
-                    style: TextStyle(color: Colors.white, fontSize: 18)
-                  ),
-                ],
+              child: FutureBuilder<Map<String, dynamic>?>(
+                future: SupabaseService.getCurrentUser(),
+                builder: (context, snapshot) {
+                  String userName = 'Khách';
+                  String greeting = 'Xin chào!';
+                  
+                  if (SupabaseService.isLoggedIn() && snapshot.hasData && snapshot.data != null) {
+                    userName = snapshot.data!['full_name'] ?? 'Người dùng';
+                    greeting = 'Xin chào,';
+                  } else if (!SupabaseService.isLoggedIn()) {
+                    greeting = 'Chào mừng!';
+                  }
+                  
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundColor: Colors.white,
+                        child: Icon(
+                          SupabaseService.isLoggedIn() ? Icons.person : Icons.person_outline,
+                          size: 35,
+                          color: Colors.green,
+                        ),
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        greeting,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      if (SupabaseService.isLoggedIn()) ...[
+                        Text(
+                          userName,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ] else ...[
+                        Text(
+                          'Vui lòng đăng nhập',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
               ),
             ),
             ListTile(
@@ -273,7 +316,7 @@ class HomePageFood extends StatelessWidget {
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('${sp.gia} vnd', style: TextStyle(color: Colors.green)),
+                                  Text('${sp.gia} đ', style: TextStyle(color: Colors.green)),
                                   if (sp.stock != null) Text('Tồn kho: ${sp.stock}', style: TextStyle(fontSize: 12, color: Colors.orange)),
                                 ],
                               ),
@@ -378,7 +421,7 @@ class HomePageFood extends StatelessWidget {
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      "${sp.gia} vnd",
+                                      "${sp.gia} đ",
                                       style: const TextStyle(
                                         color: Colors.red,
                                         fontSize: 18,
@@ -411,20 +454,26 @@ class HomePageFood extends StatelessWidget {
   }
   
   Future<void> _handleAddToCart(BuildContext context, Product product) async {
-    print('isLoggedIn: [32m${SupabaseService.isLoggedIn()}[0m');
     if (!SupabaseService.isLoggedIn()) {
-      print('Chuyển sang /login');
       Navigator.of(context).pushNamed('/login');
       return;
     }
+    
     final success = await controller.addGioHang(product);
-    print('addGioHang success: $success, slmh: [33m${controller.slmh}[0m');
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Đã thêm ${product.ten} vào giỏ hàng"),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("❌ Không thể thêm ${product.ten} vào giỏ hàng"),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
         ),
       );
     }

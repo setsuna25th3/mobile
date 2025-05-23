@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 import '../models/product.dart';
 import '../models/product_repository.dart';
+
+final supabase = Supabase.instance.client;
 
 class ProductController extends GetxController {
   final _dssp = <Product>[].obs;
   final _gioHang = <GioHangItem>[].obs;
   final _selectedCategory = Rx<ProductCategory?>(null);
   
-  ProductController() {
-    // Login functionality removed
-  }
+  ProductController();
 
   List<Product> get dssp => _dssp.value;
   List<GioHangItem> get gioHang => _gioHang.value;
   ProductCategory? get selectedCategory => _selectedCategory.value;
   
-  // Always return true since login is removed
-  bool get isLoggedIn => true;
+  bool get isLoggedIn => SupabaseService.isLoggedIn();
   String get userName => "Khách hàng";
 
   int get slmh => gioHang.fold(0, (sum, item) => sum + item.sl);
@@ -27,6 +27,10 @@ class ProductController extends GetxController {
   void onReady() {
     super.onReady();
     docDL();
+    // Sync cart từ database nếu user đã login
+    if (SupabaseService.isLoggedIn()) {
+      syncCartFromDatabase();
+    }
   }
 
   void setCategory(ProductCategory? category) {
@@ -101,8 +105,20 @@ class ProductController extends GetxController {
   }
 
   Future<bool> addGioHang(Product f) async {
+    // Kiểm tra đăng nhập trước
+    if (!SupabaseService.isLoggedIn()) {
+      return false;
+    }
+
     try {
-      // Thêm vào giỏ hàng local
+      // Thêm vào database trước (Database-first)
+      final success = await SupabaseService.addToCart(f.id, 1);
+      
+      if (!success) {
+        return false;
+      }
+      
+      // Chỉ khi database thành công mới cập nhật local
       int index = _gioHang.indexWhere((item) => item.mh.id == f.id);
       if (index == -1) {
         _gioHang.add(GioHangItem(mh: f, sl: 1));
@@ -111,13 +127,9 @@ class ProductController extends GetxController {
       }
       _gioHang.refresh();
       
-      // Đồng bộ với cơ sở dữ liệu Supabase
-      final result = await SupabaseService.addToCart(f.id, 1);
-      
       return true;
     } catch (e) {
-      // Vẫn trả về true để không ảnh hưởng đến trải nghiệm người dùng
-      return true;
+      return false;
     }
   }
 
@@ -134,6 +146,37 @@ class ProductController extends GetxController {
       _dssp.refresh();
     } catch (e) {
       // Handle error silently
+    }
+  }
+
+  // Sync cart từ database
+  Future<void> syncCartFromDatabase() async {
+    try {
+      final cartItems = await SupabaseService.getCartItems();
+      
+      // Clear local cart trước
+      _gioHang.clear();
+      
+      // Convert database cart items to local cart items
+      for (var item in cartItems) {
+        try {
+          final productData = item['products'];
+          if (productData != null) {
+            final product = Product.fromJson(productData);
+            final gioHangItem = GioHangItem(
+              mh: product, 
+              sl: item['quantity'] ?? 1
+            );
+            _gioHang.add(gioHangItem);
+          }
+        } catch (e) {
+          // Bỏ qua lỗi converting
+        }
+      }
+      
+      _gioHang.refresh();
+    } catch (e) {
+      // Bỏ qua lỗi sync
     }
   }
 }

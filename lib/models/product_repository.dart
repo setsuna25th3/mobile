@@ -59,27 +59,8 @@ class ProductSnapshot {
         .delete()
         .eq('id', id);
   }
-  
-  static Stream<List<ProductSnapshot>> getAll() {
-    return supabase
-        .from('products')
-        .stream(primaryKey: ['id'])
-        .map((data) => 
-          data.map((item) => ProductSnapshot.fromMap(item)).toList()
-        );
-  }
 
-  static Stream<List<ProductSnapshot>> getByCategory(ProductCategory category) {
-    return supabase
-        .from('products')
-        .stream(primaryKey: ['id'])
-        .eq('category', category.toString().split('.').last)
-        .map((data) => 
-          data.map((item) => ProductSnapshot.fromMap(item)).toList()
-        );
-  }
-
-  // Truy vấn data 1 lần
+  // Truy vấn tất cả sản phẩm
   static Future<List<ProductSnapshot>> getAll2() async {
     try {
       final data = await supabase

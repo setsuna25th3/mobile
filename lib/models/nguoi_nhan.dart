@@ -57,19 +57,8 @@ class ThongTinNguoiNhan {
       // Đảm bảo trường address tồn tại
       await SupabaseService.ensureUserProfileHasAddressField(userId);
       
-      print('Thông tin sẽ lưu: tenNguoiNhan=$tenNguoiNhan, diaChi=$diaChi, soDienThoai=$soDienThoai');
-      
       // Cập nhật thông tin trong user_profiles
       final client = Supabase.instance.client;
-      
-      // Xem thông tin hiện tại
-      final currentUser = await client
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-        
-      print('Dữ liệu hiện tại: $currentUser');
       
       // Cập nhật dữ liệu
       await client
@@ -80,18 +69,8 @@ class ThongTinNguoiNhan {
           'address': diaChi,
         })
         .eq('id', userId);
-      
-      // Kiểm tra lại sau khi cập nhật
-      final updatedUser = await client
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-        
-      print('Dữ liệu sau khi cập nhật: $updatedUser');
-      print('Đã lưu thông tin người nhận: $tenNguoiNhan, $diaChi, $soDienThoai');
     } catch (e) {
-      print('Lỗi khi lưu thông tin người nhận: $e');
+      // Bỏ qua lỗi trong production
     }
   }
 } 

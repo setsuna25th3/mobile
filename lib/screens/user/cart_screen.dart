@@ -286,19 +286,13 @@ class _ThongTinThanhToanScreenState extends State<ThongTinThanhToanScreen> {
         .eq('id', userId)
         .single();
       
-      print('Thông tin người dùng: $userData');
-      print('Có chứa address: ${userData.containsKey('address')}');
-      print('Giá trị address: ${userData['address']}');
-      
       setState(() {
         tenNguoiNhanController.text = userData['full_name'] ?? '';
         soDienThoaiController.text = userData['phone'] ?? '';
         diaChiController.text = userData['address'] ?? '';
-        
-        print('Địa chỉ đã được gán: ${diaChiController.text}');
       });
     } catch (e) {
-      print('Lỗi khi tải thông tin người dùng: $e');
+      // Handle error silently
     } finally {
       setState(() => _isLoading = false);
       }
@@ -339,7 +333,7 @@ class _ThongTinThanhToanScreenState extends State<ThongTinThanhToanScreen> {
               decoration: const InputDecoration(labelText: "Số điện thoại"),
             ),
             // Hiển thị tổng số tiền thanh toán
-              Text("Tổng thanh toán: ${widget.tongThanhToan} VND", style: TextStyle(fontSize: 25),),
+              Text("Tổng thanh toán: ${widget.tongThanhToan} đ", style: TextStyle(fontSize: 25),),
             // Nút xác nhận thanh toán
             ElevatedButton(
               onPressed: () async {
@@ -383,112 +377,134 @@ class _ThongTinThanhToanScreenState extends State<ThongTinThanhToanScreen> {
 
   void _processPayment(BuildContext context, String tenNguoiNhan, String diaChi, String soDienThoai, double tongThanhToan) async {
     try {
-                    final thongTinNguoiNhan = ThongTinNguoiNhan(
+      final thongTinNguoiNhan = ThongTinNguoiNhan(
         tenNguoiNhan: tenNguoiNhan,
         diaChi: diaChi,
         soDienThoai: soDienThoai,
-                    );
-                    
-                    // Lưu thông tin người nhận
-                    await thongTinNguoiNhan.luuThongTinNguoiNhan();
-                    
-                    try {
-        // Lưu đơn hàng với user_id
-                      final userId = SupabaseService.getCurrentUserId();
-        
-        // Lấy danh sách sản phẩm từ giỏ hàng
-        final cartItems = Get.find<ProductController>().gioHang;
-        
-        if (cartItems.isEmpty) {
-          throw Exception("Giỏ hàng trống");
+      );
+      
+      // Lưu thông tin người nhận
+      await thongTinNguoiNhan.luuThongTinNguoiNhan();
+      
+      // Lưu đơn hàng với user_id
+      final userId = SupabaseService.getCurrentUserId();
+      if (userId == null) {
+        throw Exception("Người dùng chưa đăng nhập");
+      }
+      
+      // Lấy danh sách sản phẩm từ giỏ hàng
+      final cartItems = Get.find<ProductController>().gioHang;
+      
+      if (cartItems.isEmpty) {
+        throw Exception("Giỏ hàng trống");
+      }
+      
+      // Lưu đơn hàng và lấy ID đơn hàng mới
+      final supabase = Supabase.instance.client;
+      final ordersResponse = await supabase.from('orders').insert({
+        'user_id': userId,
+        'total_amount': tongThanhToan,
+        'status': 'pending',
+        'phone': soDienThoai,
+        'address': diaChi,
+        'customer_name': tenNguoiNhan,
+        'created_at': DateTime.now().toIso8601String()
+      }).select('id');
+      
+      if (ordersResponse.isEmpty) {
+        throw Exception("Không thể tạo đơn hàng");
+      }
+      
+      final orderId = ordersResponse[0]['id'];
+      List<String> failedItems = [];
+      
+      // Lưu từng sản phẩm trong giỏ hàng vào bảng order_items
+      for (var item in cartItems) {
+        try {
+          await supabase.from('order_items').insert({
+            'order_id': orderId,
+            'product_id': item.mh.id,
+            'quantity': item.sl,
+            'price': item.mh.gia
+          });
+        } catch (itemError) {
+          failedItems.add(item.mh.ten);
         }
-        
-        // Lưu đơn hàng và lấy ID đơn hàng mới
-        final supabase = Supabase.instance.client;
-        final ordersResponse = await supabase.from('orders').insert({
-                        'user_id': userId,
-                        'total_amount': tongThanhToan,
-                        'status': 'pending',
-          'phone': soDienThoai,
-          'address': diaChi,
-          'customer_name': tenNguoiNhan,
-          'created_at': DateTime.now().toIso8601String()
-        }).select('id');
-        
-        if (ordersResponse.isNotEmpty) {
-          final orderId = ordersResponse[0]['id'];
-          
-          // Lưu từng sản phẩm trong giỏ hàng vào bảng order_items
-          for (var item in cartItems) {
-            try {
-              await supabase.from('order_items').insert({
-                'order_id': orderId,
-                'product_id': item.mh.id,
-                'quantity': item.sl,
-                'price': item.mh.gia
-              });
-            } catch (itemError) {
-              // Bỏ qua lỗi và tiếp tục với các sản phẩm khác
-            }
-          }
+      }
+      
+      // Kiểm tra xem có sản phẩm nào lưu thất bại không
+      if (failedItems.isNotEmpty) {
+        // Nếu có lỗi, xóa đơn hàng đã tạo và thông báo lỗi
+        try {
+          await supabase.from('orders').delete().eq('id', orderId);
+        } catch (e) {
+          // Handle error silently
         }
-                    } catch (dbError) {
-                      // Chỉ ghi log lỗi, không throw exception để tiếp tục luồng thành công
-                    }
-                    
-                    // Xóa giỏ hàng và tiếp tục luồng thành công
-                    Get.find<ProductController>().xoahet();
-                    
-                    // Hiển thị thông báo thanh toán thành công
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Đặt hàng thành công'),
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Đơn hàng của bạn đã được ghi nhận.'),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Text('Trạng thái: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                                Chip(
-                                  label: Text('Đang xử lý', style: TextStyle(color: Colors.white)),
-                                  backgroundColor: Colors.orange,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
+        throw Exception("Không thể lưu một số sản phẩm: ${failedItems.join(', ')}");
+      }
+      
+      // Nếu tất cả đều thành công, xóa giỏ hàng
+      Get.find<ProductController>().xoahet();
+      
+      // Hiển thị thông báo thanh toán thành công
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Đặt hàng thành công'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Đơn hàng của bạn đã được ghi nhận.'),
+              const SizedBox(height: 8),
+              Text('Mã đơn hàng: ${orderId.toString().substring(0, 8)}...'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('Trạng thái: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Chip(
+                    label: Text('Đang xử lý', style: TextStyle(color: Colors.white)),
+                    backgroundColor: Colors.orange,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Quay về trang chủ
+              },
+              child: const Text('Đóng'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
                 // Tải lại dữ liệu đơn hàng và chuyển đến màn hình lịch sử đơn hàng
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(builder: (context) => OrderHistoryScreen()),
-                              );
-                            },
-                            child: const Text('Xem lịch sử đơn hàng'),
-                          ),
-                        ],
-                      ),
-                    );
-                  } catch (e) {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Lỗi thanh toán'),
-                        content: Text('Đã xảy ra lỗi khi đặt hàng: \n\n${e.toString()}'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Đóng'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (context) => OrderHistoryScreen()),
+                );
+              },
+              child: const Text('Xem lịch sử đơn hàng'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Lỗi thanh toán'),
+          content: Text('Đã xảy ra lỗi khi đặt hàng:\n\n${e.toString()}'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Đóng'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 } 
