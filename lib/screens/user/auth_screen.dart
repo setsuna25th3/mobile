@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:food_store/screens/user/page_verify.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:supabase_auth_ui/supabase_auth_ui.dart';
 import 'home_screen.dart';
 
+AuthResponse? response;
 class PageAuthUser extends StatelessWidget {
   const PageAuthUser({super.key});
 
@@ -25,9 +27,21 @@ class PageAuthUser extends StatelessWidget {
           const SizedBox(height: 48),
           
           SupaEmailAuth(
-            redirectTo: null,
-            onSignInComplete: (response) => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => HomePageFood())),
-            onSignUpComplete: (response) => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => HomePageFood())),
+            onSignInComplete: (res) {
+              response = res;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => HomePageFood(),),
+                    (route) => false,
+              );
+            },
+
+            onSignUpComplete: (response) {
+              if (response.user != null){
+                Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => PageVerifyOtp(email: response.user!.email!,),)
+                );
+              }
+            },
             onPasswordResetEmailSent: () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã gửi email reset mật khẩu!'), backgroundColor: Colors.green)),
             metadataFields: [
               MetaDataField(
